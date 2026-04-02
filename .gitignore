@@ -1,0 +1,21 @@
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# === Secrets ===
+.env
+*.pem
+certs/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

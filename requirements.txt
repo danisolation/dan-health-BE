@@ -1,0 +1,24 @@
+# Backend dependencies — Amazfit Health Analytics API
+
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Database
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+
+# Config & validation
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+
+# Scheduler (cron sync)
+apscheduler==3.10.4
+
+# Zepp API client
+httpx==0.28.1
+amazfit-cli @ git+https://github.com/Baitinq/amazfit-cli.git
+
+# File upload support
+python-multipart==0.0.20
