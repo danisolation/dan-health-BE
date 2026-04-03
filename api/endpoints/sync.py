@@ -3,8 +3,8 @@ Sync Endpoint — Trigger sync dữ liệu từ Zepp API vào PostgreSQL.
 """
 from fastapi import APIRouter, Query
 
-from backend.services.sync import sync_zepp_data
-from backend.schemas.health import SyncTriggerResponse, SyncStatusResponse
+from backend.services.sync import sync_zepp_data, cleanup_old_data
+from backend.schemas.health import SyncTriggerResponse, SyncStatusResponse, CronSyncResponse
 
 router = APIRouter(tags=["sync"])
 
@@ -19,6 +19,16 @@ def trigger_sync(
     - max: 90 ngày
     """
     return sync_zepp_data(days=days)
+
+
+@router.post("/sync/cron", response_model=CronSyncResponse)
+def trigger_cron_sync() -> dict:
+    """
+    Giống cron job hàng ngày: sync 1 ngày + xóa dữ liệu cũ > 90 ngày.
+    """
+    sync_result = sync_zepp_data(days=1)
+    cleanup_result = cleanup_old_data(keep_days=90)
+    return {"sync": sync_result, "cleanup": cleanup_result}
 
 
 @router.get("/sync/status", response_model=SyncStatusResponse)

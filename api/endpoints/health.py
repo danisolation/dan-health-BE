@@ -33,7 +33,7 @@ _OVERVIEW_CACHE_TTL = 300  # 5 phút
 
 
 def _resolve_dates(
-    start: date | None, end: date | None, default_days: int = 29,
+    start: date | None, end: date | None, default_days: int = 89,
 ) -> tuple[date, date]:
     """Resolve start/end dates với defaults."""
     end_date = end or date.today()

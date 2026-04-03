@@ -274,6 +274,10 @@ def sync_zepp_data(days: int = 1) -> dict:
             app_token=settings.zepp_app_token,
             user_id=settings.zepp_user_id,
         ) as client:
+            # Zepp API uses self-signed certificate
+            client._http = client._http.__class__(
+                timeout=30.0, follow_redirects=False, verify=False,
+            )
             summaries = _sync_summaries(client, db, start, end, start_date, end_date, counts)
             _sync_daily_detail(client, db, start, end, counts)
             _sync_sleep_fallback(db, summaries)
@@ -298,7 +302,7 @@ def sync_zepp_data(days: int = 1) -> dict:
 def cron_sync_yesterday() -> None:
     """
     Ham duoc APScheduler goi luc 0:00 AM moi ngay.
-    Sync du lieu ngay hom truoc (days=1).
+    Sync du lieu ngay hom truoc (days=1) + xoa du lieu > 90 ngay.
     """
     logger.info("Cron sync started")
     result = sync_zepp_data(days=1)
@@ -306,3 +310,50 @@ def cron_sync_yesterday() -> None:
         logger.error(f"Cron sync failed: {result['error']}")
     else:
         logger.info(f"Cron sync completed: {result['counts']}")
+
+    # Cleanup: xoa du lieu cu hon 90 ngay
+    cleanup_old_data(keep_days=90)
+
+
+def cleanup_old_data(keep_days: int = 90) -> dict[str, int]:
+    """Xoa tat ca du lieu cu hon keep_days ngay."""
+    cutoff = (datetime.now() - timedelta(days=keep_days)).date()
+    db = SessionLocal()
+    deleted: dict[str, int] = {}
+
+    try:
+        deleted["heart_rate"] = db.query(HeartRate).filter(
+            sa_func.date(HeartRate.recorded_at) < cutoff
+        ).delete(synchronize_session=False)
+
+        deleted["sleep"] = db.query(SleepRecord).filter(
+            SleepRecord.sleep_date < cutoff
+        ).delete(synchronize_session=False)
+
+        deleted["activity"] = db.query(ActivityRecord).filter(
+            ActivityRecord.activity_date < cutoff
+        ).delete(synchronize_session=False)
+
+        deleted["stress"] = db.query(StressReading).filter(
+            StressReading.reading_date < cutoff
+        ).delete(synchronize_session=False)
+
+        deleted["spo2"] = db.query(SpO2Reading).filter(
+            SpO2Reading.reading_date < cutoff
+        ).delete(synchronize_session=False)
+
+        deleted["workouts"] = db.query(WorkoutRecord).filter(
+            sa_func.date(WorkoutRecord.start_time) < cutoff
+        ).delete(synchronize_session=False)
+
+        db.commit()
+        total = sum(deleted.values())
+        if total > 0:
+            logger.info(f"Cleanup: xoa {total} records cu hon {keep_days} ngay: {deleted}")
+        return deleted
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Cleanup failed: {e}")
+        return {}
+    finally:
+        db.close()

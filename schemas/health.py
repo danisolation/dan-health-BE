@@ -338,6 +338,12 @@ class SyncStatusResponse(BaseModel):
     message: str
 
 
+class CronSyncResponse(BaseModel):
+    """Response cho POST /sync/cron."""
+    sync: SyncTriggerResponse
+    cleanup: dict[str, int]
+
+
 # ===================== AI Insights =====================
 
 class TrendItem(BaseModel):
