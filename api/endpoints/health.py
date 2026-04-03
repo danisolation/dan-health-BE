@@ -20,25 +20,47 @@ from backend.schemas.health import (
     StressReadingResponse,
     SpO2ReadingResponse,
     WorkoutRecordResponse,
+    OverviewResponse,
 )
 
 router = APIRouter(tags=["health"])
 
+# Simple in-memory cache cho /overview (TTL 5 phút)
+import time as _time
+
+_overview_cache: dict[str, tuple[float, dict]] = {}
+_OVERVIEW_CACHE_TTL = 300  # 5 phút
+
+
+def _resolve_dates(
+    start: date | None, end: date | None, default_days: int = 29,
+) -> tuple[date, date]:
+    """Resolve start/end dates với defaults."""
+    end_date = end or date.today()
+    start_date = start or (end_date - timedelta(days=default_days))
+    return start_date, end_date
+
 
 # ===================== Overview / Daily Summary =====================
 
-@router.get("/overview")
+@router.get("/overview", response_model=OverviewResponse)
 def get_overview(
-    start: str = Query(default=None, description="YYYY-MM-DD"),
-    end: str = Query(default=None, description="YYYY-MM-DD"),
+    start: date | None = Query(default=None, description="YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ) -> dict:
     """
     Tổng hợp dữ liệu cho trang Overview.
     Trả về activity, sleep, heart rate, stress, SpO2, HRV, PAI gộp theo ngày.
     """
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start) if start else end_date - timedelta(days=29)
+    start_date, end_date = _resolve_dates(start, end)
+
+    # Check cache
+    cache_key = f"{start_date}_{end_date}"
+    if cache_key in _overview_cache:
+        ts, cached = _overview_cache[cache_key]
+        if _time.time() - ts < _OVERVIEW_CACHE_TTL:
+            return cached
 
     # Activity records (bao gồm readiness, hrv, stress zones, PAI)
     activities = (
@@ -202,21 +224,24 @@ def get_overview(
             "workout_count": whr["count"] if whr else 0,
         })
 
-    return {"data": daily_data}
+    result = {"data": daily_data}
+    _overview_cache[cache_key] = (_time.time(), result)
+    return result
 
 
 # ===================== Heart Rate =====================
 
 @router.get("/heart-rate", response_model=list[HeartRateResponse])
 def get_heart_rates(
-    start: str = Query(default=None, description="YYYY-MM-DD"),
-    end: str = Query(default=None, description="YYYY-MM-DD"),
+    start: date | None = Query(default=None, description="YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="YYYY-MM-DD"),
     measurement_type: str | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[HeartRate]:
     """Query heart rate records theo khoảng ngày và loại đo."""
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start) if start else end_date - timedelta(days=29)
+    start_date, end_date = _resolve_dates(start, end)
 
     query = db.query(HeartRate).filter(
         func.date(HeartRate.recorded_at).between(start_date, end_date)
@@ -224,20 +249,19 @@ def get_heart_rates(
     if measurement_type:
         query = query.filter(HeartRate.measurement_type == measurement_type)
 
-    return query.order_by(HeartRate.recorded_at).all()
+    return query.order_by(HeartRate.recorded_at).offset(offset).limit(limit).all()
 
 
 # ===================== Sleep =====================
 
 @router.get("/sleep", response_model=list[SleepRecordResponse])
 def get_sleep_records(
-    start: str = Query(default=None, description="YYYY-MM-DD"),
-    end: str = Query(default=None, description="YYYY-MM-DD"),
+    start: date | None = Query(default=None, description="YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ) -> list[SleepRecord]:
     """Query sleep records theo khoảng ngày."""
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start) if start else end_date - timedelta(days=29)
+    start_date, end_date = _resolve_dates(start, end)
 
     return (
         db.query(SleepRecord)
@@ -251,13 +275,12 @@ def get_sleep_records(
 
 @router.get("/activity", response_model=list[ActivityRecordResponse])
 def get_activity_records(
-    start: str = Query(default=None, description="YYYY-MM-DD"),
-    end: str = Query(default=None, description="YYYY-MM-DD"),
+    start: date | None = Query(default=None, description="YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ) -> list[ActivityRecord]:
     """Query activity records theo khoảng ngày."""
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start) if start else end_date - timedelta(days=29)
+    start_date, end_date = _resolve_dates(start, end)
 
     return (
         db.query(ActivityRecord)
@@ -271,18 +294,20 @@ def get_activity_records(
 
 @router.get("/stress", response_model=list[StressReadingResponse])
 def get_stress_readings(
-    start: str = Query(default=None, description="YYYY-MM-DD"),
-    end: str = Query(default=None, description="YYYY-MM-DD"),
+    start: date | None = Query(default=None, description="YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="YYYY-MM-DD"),
+    limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[StressReading]:
     """Query stress detail readings theo khoảng ngày."""
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start) if start else end_date - timedelta(days=29)
+    start_date, end_date = _resolve_dates(start, end)
 
     return (
         db.query(StressReading)
         .filter(StressReading.reading_date.between(start_date, end_date))
         .order_by(StressReading.recorded_at)
+        .offset(offset).limit(limit)
         .all()
     )
 
@@ -291,18 +316,20 @@ def get_stress_readings(
 
 @router.get("/spo2", response_model=list[SpO2ReadingResponse])
 def get_spo2_readings(
-    start: str = Query(default=None, description="YYYY-MM-DD"),
-    end: str = Query(default=None, description="YYYY-MM-DD"),
+    start: date | None = Query(default=None, description="YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="YYYY-MM-DD"),
+    limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[SpO2Reading]:
     """Query SpO2 detail readings theo khoảng ngày."""
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start) if start else end_date - timedelta(days=29)
+    start_date, end_date = _resolve_dates(start, end)
 
     return (
         db.query(SpO2Reading)
         .filter(SpO2Reading.reading_date.between(start_date, end_date))
         .order_by(SpO2Reading.recorded_at)
+        .offset(offset).limit(limit)
         .all()
     )
 
@@ -311,13 +338,12 @@ def get_spo2_readings(
 
 @router.get("/workouts", response_model=list[WorkoutRecordResponse])
 def get_workouts(
-    start: str = Query(default=None, description="YYYY-MM-DD"),
-    end: str = Query(default=None, description="YYYY-MM-DD"),
+    start: date | None = Query(default=None, description="YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ) -> list[WorkoutRecord]:
     """Query workouts theo khoảng ngày."""
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start) if start else end_date - timedelta(days=29)
+    start_date, end_date = _resolve_dates(start, end)
 
     return (
         db.query(WorkoutRecord)

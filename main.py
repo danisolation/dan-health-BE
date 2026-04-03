@@ -8,8 +8,9 @@ from collections.abc import AsyncGenerator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from backend.core.config import settings
 from backend.core.database import init_db
@@ -56,13 +57,43 @@ app = FastAPI(
 # Mount API router
 app.include_router(api_router)
 
+# GZip compression cho large responses
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # CORS — cho phép frontend dev server gọi API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+# --- Simple rate limiting cho sync/upload endpoints ---
+import time
+from collections import defaultdict
+
+_rate_limits: dict[str, list[float]] = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # seconds
+RATE_LIMIT_MAX = 5  # max requests per window
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Rate limit cho POST endpoints (sync, upload) — 5 requests/phút mỗi IP."""
+    if request.method == "POST":
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        # Xóa entries cũ
+        _rate_limits[client_ip] = [t for t in _rate_limits[client_ip] if now - t < RATE_LIMIT_WINDOW]
+        if len(_rate_limits[client_ip]) >= RATE_LIMIT_MAX:
+            return Response(
+                content='{"detail":"Rate limit exceeded. Try again later."}',
+                status_code=429,
+                media_type="application/json",
+            )
+        _rate_limits[client_ip].append(now)
+    return await call_next(request)
 
 
 @app.get("/health")

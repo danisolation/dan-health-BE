@@ -69,6 +69,17 @@ async def upload_amazfit_file(
             detail="Chỉ hỗ trợ file .csv hoặc .json",
         )
 
+    # Validate content type
+    allowed_types = {
+        "application/json", "text/csv", "text/plain",
+        "application/csv", "application/octet-stream",
+    }
+    if file.content_type and file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content-Type không hợp lệ: {file.content_type}",
+        )
+
     # Đọc nội dung file với giới hạn kích thước
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:

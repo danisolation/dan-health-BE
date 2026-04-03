@@ -259,3 +259,122 @@ class UploadResponse(BaseModel):
         default_factory=dict,
         description="Số records đã insert theo từng loại",
     )
+
+
+# ===================== Overview =====================
+
+class DailySummaryResponse(BaseModel):
+    """Một ngày trong overview data."""
+    date: str
+    steps: int = 0
+    calories: int = 0
+    distance_meters: int = 0
+    sleep_minutes: int = 0
+    deep_sleep_minutes: int = 0
+    light_sleep_minutes: int = 0
+    rem_sleep_minutes: int = 0
+    awake_minutes: int = 0
+    sleep_score: int | None = None
+    sleep_start: str | None = None
+    sleep_end: str | None = None
+    sleep_onset_latency: int | None = None
+    wake_count: int | None = None
+    interruption_score: int | None = None
+    sleep_resting_hr: int | None = None
+    resting_heart_rate: int | None = None
+    max_heart_rate: int | None = None
+    avg_stress: float | None = None
+    min_stress: int | None = None
+    max_stress: int | None = None
+    stress_relax_pct: int | None = None
+    stress_normal_pct: int | None = None
+    stress_medium_pct: int | None = None
+    stress_high_pct: int | None = None
+    avg_spo2: float | None = None
+    spo2_odi: float | None = None
+    daily_pai: float | None = None
+    pai_low_zone_min: int | None = None
+    pai_medium_zone_min: int | None = None
+    pai_high_zone_min: int | None = None
+    readiness_score: int | None = None
+    readiness_insight: int | None = None
+    hrv: float | None = None
+    sleep_hrv: float | None = None
+    hrv_score: int | None = None
+    rhr_score: int | None = None
+    rhr_baseline: int | None = None
+    sleep_rhr: int | None = None
+    mental_score: int | None = None
+    mental_baseline: int | None = None
+    physical_score: int | None = None
+    physical_baseline: int | None = None
+    afib_baseline: int | None = None
+    ahi_score: int | None = None
+    ahi_baseline: float | None = None
+    workout_avg_hr: int | None = None
+    workout_max_hr: int | None = None
+    workout_min_hr: int | None = None
+    workout_count: int = 0
+
+
+class OverviewResponse(BaseModel):
+    """Response cho /overview endpoint."""
+    data: list[DailySummaryResponse]
+
+
+# ===================== Sync =====================
+
+class SyncTriggerResponse(BaseModel):
+    """Response cho POST /sync."""
+    status: str | None = None
+    counts: dict[str, int] | None = None
+    synced_at: str | None = None
+    error: str | None = None
+
+
+class SyncStatusResponse(BaseModel):
+    """Response cho GET /sync/status."""
+    status: str
+    message: str
+
+
+# ===================== AI Insights =====================
+
+class TrendItem(BaseModel):
+    metric: str
+    direction: str
+    change_pct: float
+    current_avg: float
+    previous_avg: float
+    latest_value: float | None = None
+
+
+class AnomalyItem(BaseModel):
+    metric: str
+    date: str
+    value: float
+    baseline: float
+    z_score: float
+    severity: str
+    message: str
+
+
+class DailyInsightResponse(BaseModel):
+    """Response cho /insights/daily."""
+    summary: str
+    trends: list[TrendItem] = Field(default_factory=list)
+    anomalies: list[AnomalyItem] = Field(default_factory=list)
+    generated_at: str
+    cached: bool = False
+
+
+class TrendsOnlyResponse(BaseModel):
+    """Response cho /insights/trends."""
+    trends: list[TrendItem] = Field(default_factory=list)
+    days: int
+
+
+class AnomaliesOnlyResponse(BaseModel):
+    """Response cho /insights/anomalies."""
+    anomalies: list[AnomalyItem] = Field(default_factory=list)
+    days: int

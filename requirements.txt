@@ -22,3 +22,7 @@ amazfit-cli @ git+https://github.com/Baitinq/amazfit-cli.git
 
 # File upload support
 python-multipart==0.0.20
+
+# AI / Analytics
+google-generativeai>=0.8
+numpy>=1.26

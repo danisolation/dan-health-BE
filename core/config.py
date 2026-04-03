@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     backend_host: str = "0.0.0.0"
     backend_port: int = 8001
     backend_debug: bool = False
+    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    # --- AI / LLM ---
+    gemini_api_key: str = ""
+    ai_model: str = "gemini-2.5-flash-lite"
 
     @property
     def database_url(self) -> str:
