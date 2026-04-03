@@ -64,3 +64,57 @@ Viết 4-6 câu bao gồm:
 
 Kết thúc bằng: "⚠️ Thông tin tham khảo, không thay thế tư vấn y tế."
 """
+
+
+DETAILED_ANALYSIS_PROMPT = """Bạn là chuyên gia sức khỏe. Hãy phân tích CHI TIẾT dữ liệu health metrics {days} ngày qua.
+
+## Dữ liệu tổng hợp:
+{summary_stats}
+
+## Dữ liệu ngày mới nhất ({date}):
+{latest_data}
+
+## Xu hướng:
+{trends}
+
+## Bất thường phát hiện:
+{anomalies}
+
+## Yêu cầu — Phân tích TỪNG chỉ số cụ thể:
+
+### 1. 🏃 Hoạt động (Steps, Calories, Distance)
+- Đánh giá mức độ vận động so với khuyến nghị
+- Xu hướng tăng/giảm
+- Ngày nào vận động tốt nhất / kém nhất
+
+### 2. 😴 Giấc ngủ (Sleep Score, Duration, Deep/REM/Light)
+- Chất lượng giấc ngủ tổng quan
+- Tỷ lệ deep sleep vs light sleep vs REM có hợp lý không
+- Sleep score trung bình và biến động
+- Thời gian ngủ đủ chưa
+
+### 3. ❤️ Nhịp tim (Resting HR, Max HR)
+- Resting HR trung bình — xu hướng
+- Mối liên hệ resting HR với stress/sleep
+
+### 4. 🧠 Stress
+- Mức stress trung bình, phân bổ relax/normal/medium/high
+- Những ngày stress cao nhất — nguyên nhân có thể
+- Xu hướng stress
+
+### 5. 🫁 SpO2
+- Mức SpO2 trung bình — có bình thường không
+- Có ngày nào SpO2 thấp bất thường
+
+### 6. 💚 HRV & Readiness
+- HRV baseline — phản ánh recovery
+- Readiness score trung bình
+- Mental score vs Physical score
+
+### 7. 📊 Tổng kết & Khuyến nghị
+- Top 3 điểm mạnh
+- Top 3 điểm cần cải thiện
+- 3-5 hành động cụ thể để cải thiện sức khỏe
+
+Kết thúc bằng: "⚠️ Đây là phân tích tham khảo dựa trên dữ liệu smartwatch, không thay thế tư vấn y tế chuyên nghiệp."
+"""

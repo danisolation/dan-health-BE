@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend.ai.analyzers.anomaly import detect_anomalies
 from backend.ai.analyzers.trends import analyze_all_trends
-from backend.ai.prompts import SYSTEM_PROMPT, DAILY_INSIGHT_PROMPT
+from backend.ai.prompts import SYSTEM_PROMPT, DAILY_INSIGHT_PROMPT, DETAILED_ANALYSIS_PROMPT
 from backend.core.config import settings
 from backend.models.health import (
     ActivityRecord, HeartRate, SleepRecord,
@@ -226,7 +226,117 @@ def get_anomalies_only(db: Session, days: int = 30) -> dict:
     return {"anomalies": anomalies, "days": days}
 
 
-def _call_llm(user_prompt: str) -> str:
+def generate_detailed_analysis(db: Session, days: int = 90) -> dict:
+    """
+    Phân tích chi tiết tất cả chỉ số sức khỏe.
+    Gửi toàn bộ summary stats + trends + anomalies cho LLM phân tích sâu.
+    Cache TTL 1 giờ.
+    """
+    cache_key = f"detailed_analysis_{date.today().isoformat()}_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        cached["cached"] = True
+        return cached
+
+    daily_data = get_daily_data(db, days)
+
+    if not daily_data:
+        return {
+            "analysis": "Chưa có dữ liệu để phân tích. Hãy sync dữ liệu từ đồng hồ trước.",
+            "trends": [],
+            "anomalies": [],
+            "stats": {},
+            "generated_at": _now_iso(),
+            "cached": False,
+        }
+
+    trends = analyze_all_trends(daily_data)
+    anomalies = detect_anomalies(daily_data, lookback_days=days)
+
+    latest = daily_data[-1]
+    latest_str = _format_latest_data(latest)
+    trends_str = _format_trends(trends)
+    anomalies_str = _format_anomalies(anomalies)
+    stats = _compute_summary_stats(daily_data)
+    stats_str = _format_summary_stats(stats)
+
+    analysis = _call_llm(
+        DETAILED_ANALYSIS_PROMPT.format(
+            days=days,
+            date=latest["date"],
+            summary_stats=stats_str,
+            latest_data=latest_str,
+            trends=trends_str,
+            anomalies=anomalies_str,
+        ),
+        max_tokens=2000,
+    )
+
+    result = {
+        "analysis": analysis,
+        "trends": trends,
+        "anomalies": anomalies,
+        "stats": stats,
+        "generated_at": _now_iso(),
+        "cached": False,
+    }
+
+    _set_cache(cache_key, result)
+    return result
+
+
+def _compute_summary_stats(daily_data: list[dict]) -> dict:
+    """Tính toán summary statistics cho tất cả metrics."""
+    import numpy as np
+
+    metrics = [
+        "steps", "calories", "sleep_minutes", "sleep_score",
+        "resting_heart_rate", "avg_stress", "avg_spo2",
+        "hrv", "readiness_score", "daily_pai",
+        "mental_score", "physical_score",
+        "deep_sleep_minutes", "rem_sleep_minutes", "light_sleep_minutes",
+        "wake_count", "max_heart_rate",
+        "stress_relax_pct", "stress_high_pct",
+    ]
+
+    stats: dict = {}
+    for metric in metrics:
+        values = [d.get(metric) for d in daily_data if d.get(metric) is not None]
+        if not values:
+            continue
+        arr = np.array(values, dtype=float)
+        stats[metric] = {
+            "avg": round(float(np.mean(arr)), 1),
+            "min": round(float(np.min(arr)), 1),
+            "max": round(float(np.max(arr)), 1),
+            "std": round(float(np.std(arr)), 1),
+            "count": len(values),
+        }
+
+    return stats
+
+
+def _format_summary_stats(stats: dict) -> str:
+    """Format summary stats thành text cho LLM."""
+    labels = {
+        "steps": "Bước chân", "calories": "Calories (kcal)",
+        "sleep_minutes": "Giấc ngủ (phút)", "sleep_score": "Điểm ngủ",
+        "deep_sleep_minutes": "Deep sleep (phút)", "rem_sleep_minutes": "REM (phút)",
+        "light_sleep_minutes": "Light sleep (phút)", "wake_count": "Số lần thức giấc",
+        "resting_heart_rate": "Nhịp tim nghỉ (bpm)", "max_heart_rate": "Nhịp tim max (bpm)",
+        "avg_stress": "Stress TB", "stress_relax_pct": "Relax %", "stress_high_pct": "High stress %",
+        "avg_spo2": "SpO2 (%)", "hrv": "HRV (ms)",
+        "readiness_score": "Readiness", "daily_pai": "PAI",
+        "mental_score": "Mental", "physical_score": "Physical",
+    }
+    lines = []
+    for metric, s in stats.items():
+        label = labels.get(metric, metric)
+        lines.append(f"- {label}: TB={s['avg']}, Min={s['min']}, Max={s['max']}, SD={s['std']} ({s['count']} ngày)")
+    return "\n".join(lines) if lines else "Không có dữ liệu"
+
+
+def _call_llm(user_prompt: str, max_tokens: int = 500) -> str:
     """
     Gọi Google Gemini API để generate insight text.
     Fallback sang summary text nếu API key chưa cấu hình.
@@ -248,7 +358,7 @@ def _call_llm(user_prompt: str) -> str:
             response = model.generate_content(
                 user_prompt,
                 generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=500,
+                    max_output_tokens=max_tokens,
                     temperature=0.7,
                 ),
             )

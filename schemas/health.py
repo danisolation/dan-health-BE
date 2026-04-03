@@ -384,3 +384,21 @@ class AnomaliesOnlyResponse(BaseModel):
     """Response cho /insights/anomalies."""
     anomalies: list[AnomalyItem] = Field(default_factory=list)
     days: int
+
+
+class MetricStats(BaseModel):
+    avg: float
+    min: float
+    max: float
+    std: float
+    count: int
+
+
+class DetailedAnalysisResponse(BaseModel):
+    """Response cho /insights/detailed — phân tích chi tiết."""
+    analysis: str
+    trends: list[TrendItem] = Field(default_factory=list)
+    anomalies: list[AnomalyItem] = Field(default_factory=list)
+    stats: dict[str, MetricStats] = Field(default_factory=dict)
+    generated_at: str
+    cached: bool = False
